@@ -334,11 +334,7 @@ func runSpeech() {
     }
     if let identifier = option("install") {
         let locale = Locale(identifier: identifier)
-        guard #available(macOS 26.0, *) else {
-        print("✗ on-device transcription needs macOS 26; recording works without it")
-        exit(1)
-    }
-    let model = TranscriptionService.Model(rawValue: option("model") ?? "") ?? .automatic
+        let model = TranscriptionService.Model(rawValue: option("model") ?? "") ?? .automatic
         print("• installing the speech model for \(identifier) (\(model.rawValue))…")
         let result = SyncAwait.run { @Sendable in
             await Result.catchingAsync { try await TranscriptionService.installModel(locale: locale, model: model) }

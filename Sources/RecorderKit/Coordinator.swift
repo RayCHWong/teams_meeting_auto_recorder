@@ -200,6 +200,11 @@ public final class Coordinator {
         let events = calendar.rawEvents(from: now.addingTimeInterval(-7 * 86400), to: now.addingTimeInterval(7 * 86400))
         let teamsCount = events.filter(\.isTeams).count
         Self.log.notice("events in ±7 days: \(events.count), with a Teams join link: \(teamsCount)")
+
+        // What would actually be written into meta.json for the next few Teams meetings.
+        for meeting in calendar.meetings(from: now, to: now.addingTimeInterval(7 * 86400)).prefix(3) {
+            Self.log.notice("  would record as \"\(meeting.title, privacy: .public)\" — organizer: \(meeting.organizer ?? "—", privacy: .public); attendees: \(meeting.attendees.joined(separator: "; "), privacy: .public)")
+        }
         for event in events.sorted(by: { $0.start < $1.start }).prefix(15) {
             Self.log.notice("  \(event.isTeams ? "T" : "-", privacy: .public) \(event.start, privacy: .public) \(event.title, privacy: .public) [\(event.calendar, privacy: .public)]")
         }

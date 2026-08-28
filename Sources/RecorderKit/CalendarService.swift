@@ -143,18 +143,27 @@ public final class CalendarService: @unchecked Sendable {
         MeetingInfo(
             eventIdentifier: event.eventIdentifier,
             title: event.title?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? "Untitled meeting",
-            organizer: address(of: event.organizer),
-            attendees: (event.attendees ?? []).compactMap(address(of:)).sorted(),
+            organizer: displayName(of: event.organizer),
+            attendees: (event.attendees ?? []).compactMap(displayName(of:)).sorted(),
             scheduledStart: event.startDate,
             scheduledEnd: event.endDate)
     }
 
-    private static func address(of participant: EKParticipant?) -> String? {
+    /// A participant's display name, falling back to their email address.
+    ///
+    /// The name is what makes a recording recognisable a year later; an address is an identifier
+    /// for a mail system, not for a person. Exchange populates the display name for invitees, but
+    /// not always — an external guest invited by address alone may have no name at all, and an
+    /// address is better than dropping them from the record entirely.
+    private static func displayName(of participant: EKParticipant?) -> String? {
         guard let participant else { return nil }
-        if let url = participant.url.absoluteString.nilIfEmpty, url.hasPrefix("mailto:") {
-            return String(url.dropFirst("mailto:".count))
+        if let name = participant.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
+            return name
         }
-        return participant.name
+        let url = participant.url.absoluteString
+        return url.hasPrefix("mailto:")
+            ? String(url.dropFirst("mailto:".count)).nilIfEmpty
+            : url.nilIfEmpty
     }
 }
 
