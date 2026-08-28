@@ -190,6 +190,10 @@ deliberate: the two things Xcode would do here are the two it gets wrong for thi
 silently drops `NSAudioCaptureUsageDescription` when set as a build setting, and a default local
 build has no stable signing identity.
 
+## License
+
+MIT — see [`LICENSE`](LICENSE).
+
 ## References
 
 - [`insidegui/AudioCap`](https://github.com/insidegui/AudioCap) — working sample code for Core
