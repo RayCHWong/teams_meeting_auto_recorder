@@ -279,11 +279,20 @@ public final class Coordinator {
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 try session.startSegment()
-                await MainActor.run { self?.captureDidStart(session) }
+                await self?.captureDidStart(session)
             } catch {
-                await MainActor.run { self?.captureDidFail(session, error: error) }
+                await self?.captureDidFail(session, reason: error.localizedDescription)
             }
         }
+    }
+
+    private func markProcessingFinished(_ directory: URL) {
+        processing.remove(directory)
+    }
+
+    private func resumeAfterSleepFailed(_ reason: String) {
+        fail("Could not resume after sleep: \(reason)")
+        stopRecording(reason: "capture could not be rebuilt after sleep")
     }
 
     private func captureDidStart(_ session: RecordingSession) {
@@ -296,7 +305,7 @@ public final class Coordinator {
         Self.log.notice("recording started — \(session.metadata.title, privacy: .public)")
     }
 
-    private func captureDidFail(_ session: RecordingSession, error: Error) {
+    private func captureDidFail(_ session: RecordingSession, reason: String) {
         guard session === self.session else { return }
         isStartingCapture = false
         self.session = nil
@@ -304,9 +313,9 @@ public final class Coordinator {
         currentEventID = nil
         startedAt = nil
         currentTitle = nil
-        session.addNote("Capture failed to start: \(error.localizedDescription)")
+        session.addNote("Capture failed to start: \(reason)")
         session.finish()
-        fail("Could not start recording: \(error.localizedDescription)")
+        fail("Could not start recording: \(reason)")
     }
 
     public func stopRecording(reason: String) {
@@ -323,7 +332,7 @@ public final class Coordinator {
         Task.detached(priority: .userInitiated) { [weak self] in
             session.addNote("Stopped: \(reason)")
             let metadata = session.finish()
-            await MainActor.run { self?.captureDidStop(session, metadata: metadata, reason: reason) }
+            await self?.captureDidStop(session, metadata: metadata, reason: reason)
         }
     }
 
@@ -379,7 +388,7 @@ public final class Coordinator {
             var finished = recording.metadata
             finished.status = .complete
             store.writeMetadata(finished, to: directory)
-            await MainActor.run { _ = self?.processing.remove(directory) }
+            await self?.markProcessingFinished(directory)
         }
     }
 
@@ -539,10 +548,7 @@ public final class Coordinator {
             do {
                 try session.startSegment(reason: "resumed after system sleep")
             } catch {
-                await MainActor.run {
-                    self?.fail("Could not resume after sleep: \(error.localizedDescription)")
-                    self?.stopRecording(reason: "capture could not be rebuilt after sleep")
-                }
+                await self?.resumeAfterSleepFailed(error.localizedDescription)
             }
         }
     }

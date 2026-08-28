@@ -36,7 +36,8 @@ Everything runs locally. No cloud, no accounts, no network egress — including 
 ## Requirements
 
 - macOS 26 or later
-- Xcode Command Line Tools (`xcode-select --install`) — **Xcode itself is not required**
+- Xcode Command Line Tools (`xcode-select --install`) — **Xcode itself is not required**.
+  Check with `swift --version`; built and tested against Swift 6.3.
 - Microsoft Teams (the current client, `com.microsoft.teams2`)
 
 ## Install
