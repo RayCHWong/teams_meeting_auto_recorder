@@ -37,10 +37,11 @@ Everything runs locally. No cloud, no accounts, no network egress.
 ## Requirements
 
 - **macOS 15 or later.** On-device transcription additionally needs macOS 26 and switches itself
-  on where it is available — everything else works on 15.
-  *(Verified to build against macOS 15 and to run on macOS 26. Not yet run on macOS 15 itself.)*
+  on where it is available — everything else works on 15. Confirmed running on macOS 15 (Intel)
+  and macOS 26 (Apple Silicon).
 - Xcode Command Line Tools (`xcode-select --install`) — **Xcode itself is not required**.
-  Check with `swift --version`; built and tested against Swift 6.3.
+  Check with `swift --version`; built against Swift 6.2 and 6.3.
+- Intel and Apple Silicon both work.
 - Microsoft Teams (the current client, `com.microsoft.teams2`)
 
 ## Install
