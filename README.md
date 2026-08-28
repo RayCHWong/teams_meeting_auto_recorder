@@ -1,12 +1,14 @@
 # Teams Meeting Auto-Recorder
 
-> **This is the `macos15` branch.** It runs on macOS 15 by giving up on-device transcription,
-> which needs macOS 26. Everything else — automatic call detection, both-sides capture, mixing,
-> calendar naming, the library, in-person recordings, the silence checks — works unchanged.
-> If you are on macOS 26, use `main` instead; it has the transcription.
+> **This is the `macos15` branch.** It installs on **macOS 15 and later**.
 >
-> **Compiled for macOS 15, but never run on it.** It is verified to build clean against a
-> macOS 15 deployment target and it works on macOS 26; nobody has yet started it on an actual
+> Transcription needs macOS 26, and it is gated at *runtime* rather than compiled out — so on
+> macOS 26 this build transcribes exactly like `main` (verified), and on macOS 15 the app simply
+> runs without it. Everything else — automatic call detection, both-sides capture, mixing,
+> calendar naming, the library, in-person recordings, the silence checks — is identical.
+>
+> **Never run on macOS 15.** It is verified to build clean against a macOS 15 deployment target,
+> and verified to run and transcribe on macOS 26, but nobody has yet started it on an actual
 > macOS 15 machine. Please report what happens.
 
 A macOS menu bar app that records the audio of your Microsoft Teams meetings automatically.
@@ -169,10 +171,11 @@ build/TapSpike.app/Contents/MacOS/TapSpike <command>
 
 ## Known limitations
 
-- **No transcription on this branch.** `SpeechAnalyzer` and `DictationTranscriber` are macOS 26
-  only. Settings says so in place of the transcription controls, and `tapspike speech` /
-  `transcribe` exit with a message rather than failing obscurely.
-- **The tap does not survive a Teams restart.** `CATapDescription.bundleIDs` and
+- **No transcription below macOS 26.** `SpeechAnalyzer` and `DictationTranscriber` are macOS 26
+  only, so on macOS 15 Settings says so in place of the transcription controls and
+  `tapspike speech` / `transcribe` exit with a message rather than failing obscurely. On
+  macOS 26 the controls and the transcripts appear on their own.
+- **Below macOS 26 the tap does not survive a Teams restart.** `CATapDescription.bundleIDs` and
   `processRestoreEnabled`, which re-attach a tap when the tapped app restarts, are also macOS 26.
   If Teams restarts mid-meeting the far-end track goes silent for the remainder — the silence
   alert fires and `meta.json` records it, so it is visible, but it does not repair itself.
