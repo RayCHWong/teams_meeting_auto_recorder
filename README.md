@@ -35,7 +35,10 @@ Everything runs locally. No cloud, no accounts, no network egress — including 
 
 ## Requirements
 
-- macOS 26 or later
+- **macOS 26 or later.** The recording engine only needs macOS 14.2 (Core Audio process taps);
+  the macOS 26 floor comes from the Speech framework used for on-device transcription. On an
+  older macOS the project still *builds*, but the app will not launch —
+  [see below](#it-builds-but-will-not-launch)
 - Xcode Command Line Tools (`xcode-select --install`) — **Xcode itself is not required**.
   Check with `swift --version`; built and tested against Swift 6.3.
 - Microsoft Teams (the current client, `com.microsoft.teams2`)
@@ -162,6 +165,13 @@ build/TapSpike.app/Contents/MacOS/TapSpike <command>
 | `speech` | Compare the two speech models and their installed languages |
 | `mix <dir>` | Re-combine an existing recording |
 | `transcribe <dir>` | Re-transcribe an existing recording |
+
+### It builds but will not launch
+
+`_LSOpenURLsWithCompletionHandler() failed with error -10825` means LaunchServices refused the
+app because `LSMinimumSystemVersion` is higher than your macOS. `make install` now checks this
+before building and says so plainly. Lowering the value by hand is not a fix — it moves the
+failure to the first transcription attempt, where the Speech framework symbols are missing.
 
 ## Known limitations
 
