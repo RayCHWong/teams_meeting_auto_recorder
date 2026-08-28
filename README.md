@@ -1,10 +1,19 @@
 # Teams Meeting Auto-Recorder
 
+> **This is the `macos15` branch.** It runs on macOS 15 by giving up on-device transcription,
+> which needs macOS 26. Everything else — automatic call detection, both-sides capture, mixing,
+> calendar naming, the library, in-person recordings, the silence checks — works unchanged.
+> If you are on macOS 26, use `main` instead; it has the transcription.
+>
+> **Compiled for macOS 15, but never run on it.** It is verified to build clean against a
+> macOS 15 deployment target and it works on macOS 26; nobody has yet started it on an actual
+> macOS 15 machine. Please report what happens.
+
 A macOS menu bar app that records the audio of your Microsoft Teams meetings automatically.
 It starts when you actually join a call, stops when you leave, and names each recording from
 the matching calendar event.
 
-Everything runs locally. No cloud, no accounts, no network egress — including the transcription.
+Everything runs locally. No cloud, no accounts, no network egress.
 
 > **Recording other people has rules.** One-party consent is the legal floor in some
 > jurisdictions and not the answer anywhere. Your employer's policy, your Teams tenant's own
@@ -24,8 +33,6 @@ Everything runs locally. No cloud, no accounts, no network egress — including 
   into one file afterwards. You can keep the separate tracks instead, or both.
 - **Names recordings from your calendar.** Matched against Teams meetings in the macOS Calendar
   app, with attendees recorded alongside. A calendar miss never prevents a recording.
-- **Transcribes on device.** Optional, after the call, using Apple's Speech framework — either
-  the long-form model or the model behind macOS Dictation, whichever suits the language.
 - **Records in-person meetings too.** Microphone only, with a name you type up front.
 - **Tells you when it is failing.** The most likely failure is a recording that contains perfect
   silence, so the app measures its own output continuously and says so — mid-recording, not
@@ -35,10 +42,8 @@ Everything runs locally. No cloud, no accounts, no network egress — including 
 
 ## Requirements
 
-- **macOS 26 or later.** The recording engine only needs macOS 14.2 (Core Audio process taps);
-  the macOS 26 floor comes from the Speech framework used for on-device transcription. On an
-  older macOS the project still *builds*, but the app will not launch —
-  [see below](#it-builds-but-will-not-launch)
+- **macOS 15 or later** on this branch. Core Audio process taps — the whole recording engine —
+  are macOS 14.2+, so the floor here is set by the rest of the UI rather than by capture.
 - Xcode Command Line Tools (`xcode-select --install`) — **Xcode itself is not required**.
   Check with `swift --version`; built and tested against Swift 6.3.
 - Microsoft Teams (the current client, `com.microsoft.teams2`)
@@ -46,7 +51,7 @@ Everything runs locally. No cloud, no accounts, no network egress — including 
 ## Install
 
 ```bash
-git clone https://github.com/RayCHWong/teams_meeting_auto_recorder.git
+git clone -b macos15 https://github.com/RayCHWong/teams_meeting_auto_recorder.git
 cd teams_meeting_auto_recorder
 make cert      # once — creates a self-signed code-signing identity in your login keychain
 make install   # builds, installs to /Applications, and launches
@@ -96,7 +101,6 @@ The menu bar icon shows the current state and the elapsed time while recording.
 ~/Recordings/Meetings/2026-08-27_1400_weekly-design-review/
     recording.m4a              both sides, combined
     meta.json                  title, attendees, timings, per-track silence check
-    transcript.md              optional — the transcript text, nothing else
     original sound tracks/     the raw sides, if you choose to keep them
         mic.m4a                your side, mono 96 kbps
         system.m4a             the far end, stereo 128 kbps
@@ -108,7 +112,6 @@ without the app.
 ## Settings
 
 - **Save as** — one combined file, the separate tracks, or both
-- **Transcription** — on/off, model (Automatic / Long-form / Dictation), and spoken language
 - **Launch at login**, recordings folder, runaway-recording limit
 - **Permissions** panel with a live system-audio test
 
@@ -162,26 +165,21 @@ build/TapSpike.app/Contents/MacOS/TapSpike <command>
 | `watch` | Log call join/leave transitions |
 | `session` | A full recording including `meta.json` |
 | `calendar` | What EventKit can actually see |
-| `speech` | Compare the two speech models and their installed languages |
 | `mix <dir>` | Re-combine an existing recording |
-| `transcribe <dir>` | Re-transcribe an existing recording |
-
-### It builds but will not launch
-
-`_LSOpenURLsWithCompletionHandler() failed with error -10825` means LaunchServices refused the
-app because `LSMinimumSystemVersion` is higher than your macOS. `make install` now checks this
-before building and says so plainly. Lowering the value by hand is not a fix — it moves the
-failure to the first transcription attempt, where the Speech framework symbols are missing.
 
 ## Known limitations
 
+- **No transcription on this branch.** `SpeechAnalyzer` and `DictationTranscriber` are macOS 26
+  only. Settings says so in place of the transcription controls, and `tapspike speech` /
+  `transcribe` exit with a message rather than failing obscurely.
+- **The tap does not survive a Teams restart.** `CATapDescription.bundleIDs` and
+  `processRestoreEnabled`, which re-attach a tap when the tapped app restarts, are also macOS 26.
+  If Teams restarts mid-meeting the far-end track goes silent for the remainder — the silence
+  alert fires and `meta.json` records it, so it is visible, but it does not repair itself.
 - **macOS will not deliver notifications** for a locally-signed app like this one —
   `requestAuthorization` returns `notificationsNotAllowed`, plain and provisional. Alerts go to
   the menu bar icon, a floating panel, the library, and `alerts.log` instead. Signing with a
   Developer ID should restore notifications with no code change.
-- **The transcription language is manual.** There is no language-identification API in the Speech
-  framework, so a meeting in a language other than the one selected will produce nonsense.
-  Change it in Settings.
 - **Teams only.** Adding Zoom or Meet means extending one list of bundle-id prefixes, but it has
   not been done or tested.
 - **Not notarized, not sandboxed, no App Store.** You build it yourself.
@@ -189,7 +187,7 @@ failure to the first transcription attempt, where the Speech framework symbols a
 ## Project layout
 
 ```
-Sources/RecorderKit/       the engine — capture, detection, storage, mixing, transcription
+Sources/RecorderKit/       the engine — capture, detection, storage, mixing
 Sources/MeetingRecorder/   the SwiftUI app — menu bar, library, settings
 Sources/TapSpike/          the command-line diagnostic harness
 scripts/                   signing, bundle assembly, install
