@@ -329,12 +329,16 @@ func runPermission() {
 /// actually has installed for each.
 func runSpeech() {
     guard #available(macOS 26.0, *) else {
-        print("✗ needs macOS 26")
+        print("✗ on-device transcription needs macOS 26; recording works without it")
         exit(1)
     }
     if let identifier = option("install") {
         let locale = Locale(identifier: identifier)
-        let model = TranscriptionService.Model(rawValue: option("model") ?? "") ?? .automatic
+        guard #available(macOS 26.0, *) else {
+        print("✗ on-device transcription needs macOS 26; recording works without it")
+        exit(1)
+    }
+    let model = TranscriptionService.Model(rawValue: option("model") ?? "") ?? .automatic
         print("• installing the speech model for \(identifier) (\(model.rawValue))…")
         let result = SyncAwait.run { @Sendable in
             await Result.catchingAsync { try await TranscriptionService.installModel(locale: locale, model: model) }
@@ -378,6 +382,10 @@ func runTranscribe() throws {
         exit(1)
     }
     let recording = Recording(directory: directory, metadata: metadata)
+    guard #available(macOS 26.0, *) else {
+        print("✗ on-device transcription needs macOS 26; recording works without it")
+        exit(1)
+    }
     let model = TranscriptionService.Model(rawValue: option("model") ?? "") ?? .automatic
     let locale = Locale(identifier: option("locale") ?? Locale.current.identifier)
     print("• transcribing \(recording.metadata.tracks.count) track(s) with model=\(model.rawValue) locale=\(locale.identifier)")

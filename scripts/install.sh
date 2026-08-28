@@ -12,7 +12,7 @@ DEST="/Applications/Meeting Recorder.app"
 
 # Checked before building, not after. The build succeeds on an older macOS — it is
 # LaunchServices that refuses at launch, with a bare "-10825" that says nothing about why.
-REQUIRED_MAJOR=26
+REQUIRED_MAJOR=15
 CURRENT="$(sw_vers -productVersion)"
 if [[ "${CURRENT%%.*}" -lt "$REQUIRED_MAJOR" ]]; then
   cat <<MSG

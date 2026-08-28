@@ -12,6 +12,7 @@ import Speech
 /// speaker attribution for free — your track versus everyone else's — with no diarization.
 ///
 /// Runs as a post-processing job after `FINALIZING`, never during the call.
+@available(macOS 26.0, *)
 public enum TranscriptionService {
     private static let log = Logger(subsystem: loggingSubsystem, category: "Transcription")
 

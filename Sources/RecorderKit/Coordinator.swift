@@ -368,7 +368,7 @@ public final class Coordinator {
         let mode = settings.outputMode
         let transcribe = settings.transcriptionEnabled
         let locale = settings.transcriptionLocale
-        let model = settings.transcriptionModel
+        let modelRawValue = settings.transcriptionModelRawValue
         let store = self.store
         let directory = recording.directory
 
@@ -381,8 +381,8 @@ public final class Coordinator {
                 store.writeMetadata(metadata, to: directory)
                 recording = Recording(directory: directory, metadata: metadata)
             }
-            if transcribe {
-                await Self.transcribe(recording, locale: locale, model: model)
+            if transcribe, #available(macOS 26.0, *) {
+                await Self.transcribe(recording, locale: locale, modelRawValue: modelRawValue)
             }
 
             var finished = recording.metadata
@@ -571,12 +571,15 @@ public final class Coordinator {
 
     // MARK: - Transcription (plan.md §14)
 
+    @available(macOS 26.0, *)
     private nonisolated static func transcribe(
-        _ recording: Recording, locale: Locale, model: TranscriptionService.Model
+        _ recording: Recording, locale: Locale, modelRawValue: String
     ) async {
         do {
             let url = try await TranscriptionService.transcribe(
-                recording, locale: locale, model: model)
+                recording,
+                locale: locale,
+                model: TranscriptionService.Model(rawValue: modelRawValue) ?? .automatic)
             log.info("transcript written to \(url.lastPathComponent, privacy: .public)")
         } catch {
             // A failed transcript is a missing convenience, not a lost recording — log it and

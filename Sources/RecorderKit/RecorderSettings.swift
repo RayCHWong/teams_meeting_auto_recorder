@@ -61,13 +61,18 @@ public final class RecorderSettings {
         set { defaults.set(newValue.rawValue, forKey: Key.outputMode) }
     }
 
+    /// Stored ungated as a raw string so the setting survives on systems where the Speech
+    /// framework does not exist.
+    public var transcriptionModelRawValue: String {
+        get { defaults.string(forKey: Key.transcriptionModel) ?? "automatic" }
+        set { defaults.set(newValue, forKey: Key.transcriptionModel) }
+    }
+
     /// Which on-device speech model transcribes recordings.
+    @available(macOS 26.0, *)
     public var transcriptionModel: TranscriptionService.Model {
-        get {
-            TranscriptionService.Model(rawValue: defaults.string(forKey: Key.transcriptionModel) ?? "")
-                ?? .automatic
-        }
-        set { defaults.set(newValue.rawValue, forKey: Key.transcriptionModel) }
+        get { TranscriptionService.Model(rawValue: transcriptionModelRawValue) ?? .automatic }
+        set { transcriptionModelRawValue = newValue.rawValue }
     }
 
     /// Spoken language of the meetings. Defaults to the Mac's own language.

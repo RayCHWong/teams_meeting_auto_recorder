@@ -17,9 +17,7 @@ struct SettingsView: View {
     @State private var maxHours = RecorderSettings.shared.maxRecordingHours
     @State private var transcription = RecorderSettings.shared.transcriptionEnabled
     @State private var outputMode = RecorderSettings.shared.outputMode
-    @State private var speechModel = RecorderSettings.shared.transcriptionModel
     @State private var speechLocale = RecorderSettings.shared.transcriptionLocale.identifier
-    @State private var localeOptions: [Locale] = []
     @State private var systemAudio: SystemAudioPermission.Status = .unknown
     @State private var probing = false
     @State private var micStatus = MicCapture.authorizationStatus()
@@ -110,37 +108,14 @@ struct SettingsView: View {
             }
 
             Section("Transcription") {
-                Toggle("Transcribe after each recording", isOn: $transcription)
-                    .onChange(of: transcription) { _, value in settings.transcriptionEnabled = value }
-
-                Picker("Model", selection: $speechModel) {
-                    ForEach(TranscriptionService.Model.allCases, id: \.self) { model in
-                        Text(model.title).tag(model)
-                    }
-                }
-                .disabled(!transcription)
-                .onChange(of: speechModel) { _, value in settings.transcriptionModel = value }
-
-                Picker("Spoken language", selection: $speechLocale) {
-                    ForEach(localeOptions, id: \.identifier) { locale in
-                        Text(locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier)
-                            .tag(locale.identifier)
-                    }
-                }
-                .disabled(!transcription || localeOptions.isEmpty)
-                .onChange(of: speechLocale) { _, value in
-                    settings.transcriptionLocale = Locale(identifier: value)
-                }
-
-                Text("Runs entirely on this Mac after the call ends, never during it. “Dictation” is the model behind macOS Dictation — it covers far more languages, and its assets are already installed for anything you have enabled for keyboard dictation.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .task {
-                localeOptions = await TranscriptionService.availableLocales()
-                if !localeOptions.contains(where: { $0.identifier == speechLocale }) {
-                    speechLocale = localeOptions.first(where: { $0.identifier.hasPrefix("en") })?.identifier
-                        ?? localeOptions.first?.identifier ?? speechLocale
+                if #available(macOS 26.0, *) {
+                    TranscriptionSettings(transcription: $transcription, speechLocale: $speechLocale)
+                } else {
+                    // Everything else in the app works on macOS 15; the Speech framework is the
+                    // one thing that does not exist before macOS 26.
+                    Text("On-device transcription requires macOS 26. Recording works without it.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -220,5 +195,53 @@ struct PermissionRow<Accessory: View>: View {
         case .denied: return .red
         case .unknown: return .secondary
         }
+    }
+}
+
+
+/// The transcription controls, which only exist where the Speech framework does.
+@available(macOS 26.0, *)
+private struct TranscriptionSettings: View {
+    @Binding var transcription: Bool
+    @Binding var speechLocale: String
+
+    @State private var speechModel = RecorderSettings.shared.transcriptionModel
+    @State private var localeOptions: [Locale] = []
+
+    private var settings: RecorderSettings { .shared }
+
+    var body: some View {
+        Toggle("Transcribe after each recording", isOn: $transcription)
+            .onChange(of: transcription) { _, value in settings.transcriptionEnabled = value }
+
+        Picker("Model", selection: $speechModel) {
+            ForEach(TranscriptionService.Model.allCases, id: \.self) { model in
+                Text(model.title).tag(model)
+            }
+        }
+        .disabled(!transcription)
+        .onChange(of: speechModel) { _, value in settings.transcriptionModel = value }
+
+        Picker("Spoken language", selection: $speechLocale) {
+            ForEach(localeOptions, id: \.identifier) { locale in
+                Text(locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier)
+                    .tag(locale.identifier)
+            }
+        }
+        .disabled(!transcription || localeOptions.isEmpty)
+        .onChange(of: speechLocale) { _, value in
+            settings.transcriptionLocale = Locale(identifier: value)
+        }
+
+        Text("Runs entirely on this Mac after the call ends, never during it. \u{201C}Dictation\u{201D} is the model behind macOS Dictation — it covers far more languages, and its assets are already installed for anything you have enabled for keyboard dictation.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .task {
+                localeOptions = await TranscriptionService.availableLocales()
+                if !localeOptions.contains(where: { $0.identifier == speechLocale }) {
+                    speechLocale = localeOptions.first(where: { $0.identifier.hasPrefix("en") })?.identifier
+                        ?? localeOptions.first?.identifier ?? speechLocale
+                }
+            }
     }
 }

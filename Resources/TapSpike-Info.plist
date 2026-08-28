@@ -17,7 +17,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>26.0</string>
+	<string>15.0</string>
 	<!-- Menu bar app: no Dock icon, no main window on launch (plan.md §5). -->
 	<!--
 	  LSUIElement, not LSBackgroundOnly. A background-only app cannot display a TCC prompt, so

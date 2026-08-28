@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "TeamsMeetingAutoRecorder",
-    platforms: [.macOS("26.0")],   // matches LSMinimumSystemVersion; the Speech and tap APIs are macOS 26
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "RecorderKit", targets: ["RecorderKit"]),
         .executable(name: "TapSpike", targets: ["TapSpike"]),
