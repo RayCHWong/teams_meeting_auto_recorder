@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Meeting Recorder</string>
+	<key>CFBundleDisplayName</key>
+	<string>Meeting Recorder</string>
+	<key>CFBundleExecutable</key>
+	<string>MeetingRecorder</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.raywong.MeetingRecorder</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<!-- Menu bar app: no Dock icon, no main window on launch (plan.md §5). -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+
+	<!--
+	  These four keys must live in this file, not in build settings. Xcode silently drops
+	  NSAudioCaptureUsageDescription when it is set via INFOPLIST_KEY_*, unlike every other
+	  privacy key, and a missing key means TCC denies access with no error anywhere and every
+	  captured sample comes back zero (plan.md §6.1, §15.2). `make verify` checks the built
+	  bundle rather than trusting this file.
+	-->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Records the audio of your Teams meetings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Records your side of your Teams meetings.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Names recordings after the matching meeting on your calendar.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Transcribes your meeting recordings on this Mac.</string>
+</dict>
+</plist>
