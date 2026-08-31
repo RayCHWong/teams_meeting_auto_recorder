@@ -84,7 +84,7 @@ The menu bar icon shows the current state and the elapsed time while recording.
 
 | Action | What it does |
 |---|---|
-| *(automatic)* | Recording starts ~3 s after you join a Teams call and stops ~20 s after you leave |
+| *(automatic)* | Recording starts ~3 s after you join a Teams call and stops ~10 s after you leave |
 | **Stop Recording** | Ends the current recording immediately |
 | **Start Recording** | For a call the detector missed |
 | **Record In-Person Meeting** | Asks for a name, then captures the microphone only |

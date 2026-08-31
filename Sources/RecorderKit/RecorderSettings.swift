@@ -33,7 +33,7 @@ public final class RecorderSettings {
             Key.transcriptionEnabled: false,
             Key.maxRecordingHours: 4.0,
             Key.startDebounce: 3.0,
-            Key.stopDebounce: 20.0,
+            Key.stopDebounce: 10.0,
         ])
     }
 

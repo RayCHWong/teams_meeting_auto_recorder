@@ -43,10 +43,11 @@ public final class ProcessMonitor: @unchecked Sendable {
 
     private static let log = Logger(subsystem: loggingSubsystem, category: "ProcessMonitor")
 
-    /// 3 s to start, 20 s to stop. The stop debounce is the important one: muting, switching
-    /// headsets, or a device change must not end a recording (plan.md §5).
+    /// 3 s to start, 10 s to stop. The stop debounce is the important one: switching headsets or
+    /// changing audio device must not end a recording (plan.md §5 specified 20 s; shortened at
+    /// the owner's request, since a device swap settles in a second or two).
     public var startDebounce: TimeInterval = 3
-    public var stopDebounce: TimeInterval = 20
+    public var stopDebounce: TimeInterval = 10
     public var pollInterval: TimeInterval = 2
 
     public var onStateChange: (@Sendable (Event) -> Void)?
