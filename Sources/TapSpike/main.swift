@@ -303,6 +303,36 @@ func runCalendar() {
     for event in events.sorted(by: { $0.start < $1.start }).prefix(25) {
         print("  \(event.isTeams ? "T" : " ") \(formatter.string(from: event.start))  \(event.title)   [\(event.calendar)]")
     }
+    // What `meeting(at:)` actually resolves to, minute by minute. The match depends on the
+    // clock, so a single sample proves nothing: a recording is split when the answer *changes*
+    // mid-meeting, and only a sweep shows that. This is how the 2026-09-10 split was confirmed.
+    if let at = option("at") {
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd HH:mm"
+        parser.timeZone = .current
+        guard let centre = parser.date(from: at) else {
+            print("\n  --at must look like \"2026-09-10 10:25\"")
+            exit(64)
+        }
+        let span = Int(option("sweep") ?? "0") ?? 0
+        print("\nwhat meeting(at:) resolves to\(span > 0 ? ", ±\(span) min" : "") around \(at):")
+        var previous: String?
+        for offset in -span...span {
+            let moment = centre.addingTimeInterval(Double(offset) * 60)
+            let info = service.meeting(at: moment)
+            let key = "\(info.eventIdentifier ?? "ad-hoc")|\(info.title)"
+            if key != previous {
+                let window = info.scheduledStart.map { s in
+                    let e = info.scheduledEnd ?? s
+                    return " [\(formatter.string(from: s))–\(formatter.string(from: e))]"
+                } ?? ""
+                print("  \(formatter.string(from: moment))  →  \(info.title)\(window)")
+                previous = key
+            }
+        }
+        print("  (only changes are printed — one line means the match never flipped)")
+    }
+
     if teamsEvents.isEmpty && !events.isEmpty {
         print("\n  Events exist but none carry a teams.microsoft.com/l/meetup-join link — check that")
         print("  the work account, not just a personal calendar, is connected.")

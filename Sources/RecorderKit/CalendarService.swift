@@ -123,12 +123,32 @@ public final class CalendarService: @unchecked Sendable {
 
     static func best(of candidates: [EKEvent], at date: Date) -> EKEvent? {
         candidates.min { lhs, rhs in
+            // A meeting that is actually happening beats one that merely starts
+            // sooner. Without this the nearest-start rule below is unstable over
+            // time: the lookahead window makes the *next* meeting visible five
+            // minutes early, and a meeting that began 25 minutes ago always loses
+            // to one starting in 5. That is what split a 10:00-11:00 meeting in
+            // half at 10:25 on 2026-09-10 — the recording was cut inside its own
+            // scheduled hour.
+            let lhsRunning = isRunning(lhs, at: date)
+            let rhsRunning = isRunning(rhs, at: date)
+            if lhsRunning != rhsRunning { return lhsRunning }
+
             // Accepted beats tentative; then whichever starts nearest to now.
             let lhsRank = rank(participantStatus(lhs))
             let rhsRank = rank(participantStatus(rhs))
             if lhsRank != rhsRank { return lhsRank < rhsRank }
             return abs(lhs.startDate.timeIntervalSince(date)) < abs(rhs.startDate.timeIntervalSince(date))
         }
+    }
+
+    /// Whether `date` falls inside the event's scheduled window.
+    ///
+    /// Half-open on purpose: at the instant one meeting ends and the next begins,
+    /// only the new one is running, which is exactly the hand-off the split logic
+    /// in `Coordinator` is looking for.
+    static func isRunning(_ event: EKEvent, at date: Date) -> Bool {
+        event.startDate <= date && date < event.endDate
     }
 
     private static func rank(_ status: EKParticipantStatus) -> Int {

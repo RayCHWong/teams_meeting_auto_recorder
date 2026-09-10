@@ -56,6 +56,14 @@ public final class Coordinator {
     private var didWarnSilentThisSession = Set<TrackMetadata.Source>()
     private var sleepPending = false
     private var currentEventID: String?
+
+    /// A different calendar event seen while recording, and when it was first seen. The split only
+    /// happens once the same event has held for `splitConfirmSeconds`.
+    private var pendingSplitEventID: String?
+    private var pendingSplitSince: Date?
+
+    /// How long a new calendar event must remain the best match before a recording is split.
+    static let splitConfirmSeconds: TimeInterval = 30
     /// True between the start request and the tap actually running — capture start is async
     /// now, so a second request must not slip in behind it.
     private var isStartingCapture = false
@@ -316,6 +324,8 @@ public final class Coordinator {
         self.session = nil
         currentDirectory = nil
         currentEventID = nil
+        pendingSplitEventID = nil
+        pendingSplitSince = nil
         startedAt = nil
         currentTitle = nil
         session.addNote("Capture failed to start: \(reason)")
@@ -328,6 +338,8 @@ public final class Coordinator {
         self.session = nil
         self.currentDirectory = nil
         self.currentEventID = nil
+        self.pendingSplitEventID = nil
+        self.pendingSplitSince = nil
         isStartingCapture = false
         state = .finalizing
         systemLevel = 0
@@ -473,13 +485,37 @@ public final class Coordinator {
 
         // Back-to-back meetings: Teams audio usually does not stop between them. Never merge
         // two events into one file (plan.md §9.4).
+        //
+        // Two guards, both learned from a real split. The calendar's `meeting()` looks five
+        // minutes ahead, so the next meeting becomes a candidate — and can win the match — while
+        // the current one is still running. Acting on that alone cut a 10:00-11:00 meeting in two
+        // at 10:25 on 2026-09-10, and both halves matched the *same* event, which is the giveaway.
         if state == .recording, let currentEventID, session.metadata.trigger == .auto {
-            let now = calendar.meeting()
-            if let newID = now.eventIdentifier, newID != currentEventID {
-                Self.log.notice("calendar moved on to a new event — splitting the recording")
-                stopRecording(reason: "next meeting started")
-                startRecording(trigger: .auto)
-                return
+            // 1. The recorded meeting's own window must have closed. A meeting that overruns is
+            //    still that meeting. When the end is unknown the old behaviour stands, so the
+            //    never-merge guarantee is not weakened by a missing date.
+            let ownWindowClosed = session.metadata.scheduledEnd.map { Date() >= $0 } ?? true
+            let candidateID = ownWindowClosed ? calendar.meeting().eventIdentifier : nil
+
+            if let candidateID, candidateID != currentEventID {
+                // 2. And it must stay the answer. The tie-break depends on the clock, so a single
+                //    sample can flip for one tick and back again; a recording must not be cut by
+                //    that.
+                if pendingSplitEventID != candidateID {
+                    pendingSplitEventID = candidateID
+                    pendingSplitSince = Date()
+                } else if let since = pendingSplitSince,
+                          Date().timeIntervalSince(since) >= Self.splitConfirmSeconds {
+                    Self.log.notice("calendar moved on to a new event — splitting the recording")
+                    pendingSplitEventID = nil
+                    pendingSplitSince = nil
+                    stopRecording(reason: "next meeting started")
+                    startRecording(trigger: .auto)
+                    return
+                }
+            } else if pendingSplitEventID != nil {
+                pendingSplitEventID = nil
+                pendingSplitSince = nil
             }
         }
 
