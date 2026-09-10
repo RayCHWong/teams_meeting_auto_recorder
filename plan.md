@@ -329,7 +329,7 @@ collects warnings: sleep restarts, device changes, calendar misses.
 |---|---|
 | System sleep / wake | On wake, tear down and rebuild the tap into a new numbered file (`system.002.m4a`). The aggregate device does not reliably survive sleep. Do not attempt gapless recovery; record it in `notes`. |
 | Output device change mid-call | The aggregate is pinned to built-in output, so it should survive. Log the change and re-run the RMS check on the next buffer window. |
-| Back-to-back meetings | Teams audio usually does not stop between them. If the calendar shows a new event starting and the previous one has ended, close the current recording and open a new one. Never merge two events into one file. |
+| Back-to-back meetings | A recording ends when Teams releases the audio device, and only then. Moving between calls does release it, so genuine transitions split on their own via the stop debounce. **Revised 2026-09-10:** the calendar no longer splits a recording. It used to, on the assumption that Teams audio runs continuously between meetings — but what that actually caught was meetings that *overran*, cutting a 10:00–11:00 call in half at its own end time and labelling the tail with the next meeting. Continuous audio now means one recording, named for the meeting you joined, with a note recording that the calendar moved on. |
 | Teams restarts mid-call | Re-resolve the process object; restart capture into a numbered file. |
 | Low disk space | Check before every start. Refuse below 5 GB and notify. |
 | Runaway recording | Hard stop at 4 hours. Notify, and start a new file if audio is still live. |
