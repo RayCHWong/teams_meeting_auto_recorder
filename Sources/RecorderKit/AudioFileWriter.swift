@@ -17,7 +17,7 @@ public final class AudioFileWriter: @unchecked Sendable {
     private var file: AVAudioFile?
     private var converter: AVAudioConverter?
     private let processingFormat: AVAudioFormat
-    private let inputFormat: AVAudioFormat
+    private var inputFormat: AVAudioFormat
     private var didLogWriteFailure = false
     private(set) public var framesWritten: AVAudioFramePosition = 0
 
@@ -47,18 +47,22 @@ public final class AudioFileWriter: @unchecked Sendable {
         self.file = file
         self.processingFormat = file.processingFormat
 
-        // Resample / down-mix only when the source disagrees with the file (plan.md §9.1).
-        if inputFormat.sampleRate != processingFormat.sampleRate
+        self.converter = try Self.makeConverter(from: inputFormat, to: processingFormat)
+    }
+
+    /// Resample / down-mix only when the source disagrees with the file (plan.md §9.1).
+    private static func makeConverter(from inputFormat: AVAudioFormat, to processingFormat: AVAudioFormat) throws -> AVAudioConverter? {
+        guard inputFormat.sampleRate != processingFormat.sampleRate
             || inputFormat.channelCount != processingFormat.channelCount
             || inputFormat.commonFormat != processingFormat.commonFormat
             || inputFormat.isInterleaved != processingFormat.isInterleaved
-        {
-            guard let converter = AVAudioConverter(from: inputFormat, to: processingFormat) else {
-                throw RecorderError.formatConversionUnavailable(from: inputFormat, to: processingFormat)
-            }
-            converter.sampleRateConverterQuality = AVAudioQuality.high.rawValue
-            self.converter = converter
+        else { return nil }
+
+        guard let converter = AVAudioConverter(from: inputFormat, to: processingFormat) else {
+            throw RecorderError.formatConversionUnavailable(from: inputFormat, to: processingFormat)
         }
+        converter.sampleRateConverterQuality = AVAudioQuality.high.rawValue
+        return converter
     }
 
     /// Called from the capture thread. Never throws — a write failure mid-meeting must not
@@ -69,6 +73,21 @@ public final class AudioFileWriter: @unchecked Sendable {
         defer { lock.unlock() }
         guard let file else { return }
         if firstBufferAt == nil, buffer.frameLength > 0 { firstBufferAt = Date() }
+        // The capture source can change format under us — a headset swap, or Teams moving a
+        // Bluetooth mic between A2DP and HFP. Rebuild the converter rather than writing the new
+        // samples under the old format's label, which stretches or squeezes the whole file.
+        if buffer.format != inputFormat {
+            Self.log.warning("input format changed for \(self.url.lastPathComponent, privacy: .public): \(self.inputFormat.sampleRate, privacy: .public) Hz -> \(buffer.format.sampleRate, privacy: .public) Hz")
+            inputFormat = buffer.format
+            converter = (try? Self.makeConverter(from: buffer.format, to: processingFormat)) ?? nil
+            if converter == nil, buffer.format != processingFormat {
+                if !didLogWriteFailure {
+                    didLogWriteFailure = true
+                    Self.log.error("no converter for the new input format of \(self.url.lastPathComponent, privacy: .public)")
+                }
+                return
+            }
+        }
         do {
             if let converter {
                 guard let converted = try convert(buffer, using: converter) else { return }

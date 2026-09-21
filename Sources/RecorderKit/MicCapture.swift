@@ -76,6 +76,9 @@ public final class MicCapture: NSObject, @unchecked Sendable {
         if session.isRunning { session.stopRunning() }
         session.inputs.forEach(session.removeInput)
         session.outputs.forEach(session.removeOutput)
+        lock.lock()
+        format = nil
+        lock.unlock()
     }
 
     public var isRunning: Bool { session.isRunning }
@@ -91,12 +94,26 @@ extension MicCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
               let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(description)
         else { return }
 
-        if format == nil {
-            var asbd = streamDescription.pointee
-            format = AVAudioFormat(streamDescription: &asbd)
-        }
+        // The device's stream format is not fixed for the life of the session: Teams pulls a
+        // Bluetooth headset down to 16 kHz HFP when a call starts and lets it back up to 48 kHz
+        // when the call ends, and the built-in mic follows. Latching the format from the first
+        // buffer and trusting it forever is how a meeting ends up three times too long and three
+        // times too slow — the samples are relabelled, never resampled.
+        var asbd = streamDescription.pointee
         lock.lock()
+        if format == nil || !matches(format!, asbd) {
+            let previous = format
+            format = AVAudioFormat(streamDescription: &asbd)
+            if let previous, let format {
+                Self.log.warning("""
+                    mic format changed mid-session: \(previous.sampleRate, privacy: .public) Hz \
+                    \(previous.channelCount, privacy: .public) ch -> \
+                    \(format.sampleRate, privacy: .public) Hz \(format.channelCount, privacy: .public) ch
+                    """)
+            }
+        }
         let handler = self.handler
+        let format = self.format
         lock.unlock()
         guard let handler, let format else { return }
 
@@ -108,5 +125,14 @@ extension MicCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
             sampleBuffer, at: 0, frameCount: Int32(frames), into: buffer.mutableAudioBufferList)
         guard status == noErr else { return }
         handler(buffer)
+    }
+
+    private func matches(_ format: AVAudioFormat, _ asbd: AudioStreamBasicDescription) -> Bool {
+        let current = format.streamDescription.pointee
+        return current.mSampleRate == asbd.mSampleRate
+            && current.mChannelsPerFrame == asbd.mChannelsPerFrame
+            && current.mFormatID == asbd.mFormatID
+            && current.mFormatFlags == asbd.mFormatFlags
+            && current.mBitsPerChannel == asbd.mBitsPerChannel
     }
 }
