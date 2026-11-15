@@ -28,7 +28,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Recording") {
-                Toggle("Record Teams calls automatically", isOn: $autoRecord)
+                Toggle("Record \(MeetingApp.supportedNames) calls automatically", isOn: $autoRecord)
                     .onChange(of: autoRecord) { _, value in settings.autoRecordEnabled = value }
 
                 LabeledContent("Save to") {

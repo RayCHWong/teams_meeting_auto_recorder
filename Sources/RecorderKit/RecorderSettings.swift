@@ -151,15 +151,16 @@ public final class RecorderSettings {
         set { defaults.set(newValue, forKey: Key.stopDebounce) }
     }
 
-    /// Which app to record. Overridable so the capture path can be pointed at a controllable
+    /// Which apps to record — Teams and Zoom by default. Overridable so the capture path can be pointed at a controllable
     /// audio source during testing — proving that *this* bundle holds system-audio permission
     /// needs a target that is definitely making sound, which Teams is not on demand.
     ///
     ///     defaults write com.raywong.MeetingRecorder targetBundlePrefixes -array com.apple.QuickTimePlayerX
-    ///     defaults delete com.raywong.MeetingRecorder targetBundlePrefixes    # back to Teams
+    ///     defaults write com.raywong.MeetingRecorder targetBundlePrefixes -array us.zoom   # Zoom only
+    ///     defaults delete com.raywong.MeetingRecorder targetBundlePrefixes    # back to Teams + Zoom
     public var targetBundlePrefixes: [String] {
         let stored = defaults.stringArray(forKey: Key.targetBundlePrefixes) ?? []
-        return stored.isEmpty ? Coordinator.defaultTeamsBundlePrefixes : stored
+        return stored.isEmpty ? Coordinator.defaultBundlePrefixes : stored
     }
 
     /// Day-stamp of the last daily health check, so it runs once per day (plan.md §13).

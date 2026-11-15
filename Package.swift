@@ -25,5 +25,12 @@ let package = Package(
             dependencies: ["RecorderKit"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Pure logic only — app matching, tap narrowing, calendar link detection. Nothing here
+        // touches Core Audio, so it runs without any permission.
+        .testTarget(
+            name: "RecorderKitTests",
+            dependencies: ["RecorderKit"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
     ]
 )

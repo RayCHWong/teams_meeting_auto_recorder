@@ -103,6 +103,9 @@ public struct RecordingMetadata: Codable, Sendable, Equatable {
     public var actualStart: Date
     public var actualEnd: Date?
     public var trigger: Trigger
+    /// Which meeting app the far end was captured from ("Teams", "Zoom"). Absent in files written
+    /// before Zoom support, in-person recordings, and when no app was using the mic at start.
+    public var app: String?
     /// Absent in files written before this existed — those are all finished, so treat as complete.
     public var status: Status?
     public var tracks: [TrackMetadata]
@@ -110,7 +113,7 @@ public struct RecordingMetadata: Codable, Sendable, Equatable {
     public var notes: [String]
 
     enum CodingKeys: String, CodingKey {
-        case schema, title, organizer, attendees, trigger, tracks, notes, status
+        case schema, title, organizer, attendees, trigger, tracks, notes, status, app
         case eventID = "event_id"
         case scheduledStart = "scheduled_start"
         case scheduledEnd = "scheduled_end"

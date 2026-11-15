@@ -162,7 +162,7 @@ private final class SingleBufferSource: @unchecked Sendable {
 
 public enum RecorderError: LocalizedError {
     case formatConversionUnavailable(from: AVAudioFormat, to: AVAudioFormat)
-    case teamsNotRunning
+    case meetingAppNotRunning
     case noAudioInputDevice
     case insufficientDiskSpace(freeBytes: Int64, requiredBytes: Int64)
 
@@ -170,8 +170,8 @@ public enum RecorderError: LocalizedError {
         switch self {
         case .formatConversionUnavailable(let from, let to):
             return "No converter from \(from) to \(to)"
-        case .teamsNotRunning:
-            return "Microsoft Teams is not running"
+        case .meetingAppNotRunning:
+            return "No meeting app (\(MeetingApp.supportedNames)) is running"
         case .noAudioInputDevice:
             return "No audio input device is available"
         case .insufficientDiskSpace(let free, let required):

@@ -97,7 +97,7 @@ struct MenuBarView: View {
 
     private var indicatorColor: Color {
         switch coordinator.state {
-        case .idle: return coordinator.teamsIsRunning ? .secondary : Color.secondary.opacity(0.4)
+        case .idle: return coordinator.meetingAppIsRunning ? .secondary : Color.secondary.opacity(0.4)
         case .armed: return .yellow
         case .recording: return .red
         case .finalizing: return .orange

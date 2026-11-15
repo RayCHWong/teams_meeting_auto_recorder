@@ -2,9 +2,13 @@ import CoreAudio
 import Foundation
 import OSLog
 
-/// Watches Microsoft Teams and reports when a call actually starts and ends.
+/// Watches the supported meeting apps (Teams, Zoom) and reports when a call actually starts
+/// and ends.
 ///
-/// The signal is `kAudioProcessPropertyIsRunningInput` — Teams pulling from an input device.
+/// The signal is `kAudioProcessPropertyIsRunningInput` — the app pulling from an input device.
+/// All watched apps are one pool: input on any of them is a call. Which app it is matters only
+/// for naming and for what gets tapped, and that is decided at capture time
+/// (`ProcessResolver.callTargets`).
 /// This beats a calendar window outright: it handles joining late, leaving early, skipped
 /// meetings, and ad-hoc calls that were never on the calendar (plan.md §3, §7).
 ///
@@ -31,7 +35,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         public var description: String {
             switch self {
             case .targetAppeared(let count): return "target appeared — \(count) process object(s)"
-            case .targetDisappeared: return "target disappeared — Teams is not running"
+            case .targetDisappeared: return "target disappeared — no meeting app is running"
             case .armed: return "ARMED (input started, waiting out start debounce)"
             case .callStarted: return "RECORDING (call started)"
             case .finalizing: return "FINALIZING (input stopped, waiting out stop debounce)"
@@ -70,9 +74,14 @@ public final class ProcessMonitor: @unchecked Sendable {
     ///
     /// Deliberately separate from `isInCall`: that is the debounced state machine, and a
     /// recording started manually — or one running when the machine drifts — still needs a
-    /// truthful answer to "is Teams using the microphone?"
+    /// truthful answer to "is a meeting app using the microphone?"
     public func inputIsActive() -> Bool {
         queue.sync { ProcessResolver.anyRunningInput(trackedObjects) }
+    }
+
+    /// Which supported app is using the microphone right now, if any.
+    public func appUsingInput() -> MeetingApp? {
+        queue.sync { ProcessResolver.appUsingInput(trackedObjects) }
     }
 
     /// The process objects currently being watched — this is also what gets tapped, so the
@@ -117,7 +126,7 @@ public final class ProcessMonitor: @unchecked Sendable {
 
         if found.isEmpty {
             emit(.targetDisappeared)
-            // Teams going away entirely ends any call in progress; there is nothing left to
+            // Every meeting app going away ends any call in progress; there is nothing left to
             // watch and no debounce worth waiting out (plan.md §9.4).
             if isInCall {
                 isInCall = false
@@ -127,7 +136,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         } else if wasEmpty {
             emit(.targetAppeared(processCount: found.count))
         } else {
-            Self.log.debug("Teams process family changed — now \(found.count) object(s)")
+            Self.log.debug("meeting app process family changed — now \(found.count) object(s)")
         }
     }
 
