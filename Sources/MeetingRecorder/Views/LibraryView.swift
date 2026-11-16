@@ -51,7 +51,7 @@ struct LibraryView: View {
                     recordings.isEmpty ? "No recordings yet" : "Select a recording",
                     systemImage: "waveform",
                     description: Text(recordings.isEmpty
-                        ? "Recordings appear here automatically when you join a Teams call."
+                        ? "Recordings appear here automatically when you join a \(MeetingApp.supportedNames) call."
                         : ""))
             }
         }

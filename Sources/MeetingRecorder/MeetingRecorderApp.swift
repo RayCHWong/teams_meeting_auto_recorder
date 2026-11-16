@@ -99,10 +99,11 @@ extension Coordinator {
     var statusText: String {
         switch state {
         case .idle:
-            if !teamsIsRunning { return "Teams is not running" }
-            return RecorderSettings.shared.isAutoRecordActive ? "Waiting for a Teams call" : "Auto-recording paused"
-        case .armed: return "Teams audio detected…"
-        case .recording: return "Recording"
+            if !meetingAppIsRunning { return "\(MeetingApp.supportedNames) is not running" }
+            return RecorderSettings.shared.isAutoRecordActive
+                ? "Waiting for a \(MeetingApp.supportedNames) call" : "Auto-recording paused"
+        case .armed: return "\(activeApp?.name ?? "Meeting") audio detected…"
+        case .recording: return activeApp.map { "Recording \($0.name) call" } ?? "Recording"
         case .finalizing: return "Call ended — finishing"
         }
     }

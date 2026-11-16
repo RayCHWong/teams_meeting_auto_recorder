@@ -33,8 +33,8 @@ public final class CalendarService: @unchecked Sendable {
     private static let log = Logger(subsystem: loggingSubsystem, category: "Calendar")
     private let store = EKEventStore()
 
-    /// A Teams meeting is identified by its join URL appearing anywhere in the event.
-    private static let joinURLMarker = "teams.microsoft.com/l/meetup-join"
+    // An online meeting is identified by a Teams or Zoom join URL appearing anywhere in the
+    // event — see `MeetingApp.joinURLMarkers`.
 
     public init() {}
 
@@ -48,9 +48,14 @@ public final class CalendarService: @unchecked Sendable {
 
     /// The best calendar match for a call starting now.
     ///
+    /// `app` is the meeting app actually in the call. When given, events with that app's join
+    /// link win over the other app's — a Zoom call is not named after an overlapping Teams
+    /// meeting. When no event has that app's link, any online meeting still matches: a Zoom
+    /// link pasted into a Teams invite's notes is common enough not to throw away.
+    ///
     /// Returns `.adHoc` rather than nil when nothing matches, and never throws: a calendar
     /// failure must degrade to a differently-named recording, not to no recording.
-    public func meeting(at date: Date = Date(), window: TimeInterval = 5 * 60) -> MeetingInfo {
+    public func meeting(for app: MeetingApp? = nil, at date: Date = Date(), window: TimeInterval = 5 * 60) -> MeetingInfo {
         guard Self.authorizationStatus == .fullAccess else {
             Self.log.notice("no calendar access — recording as ad-hoc")
             return .adHoc
@@ -64,6 +69,10 @@ public final class CalendarService: @unchecked Sendable {
         var candidates: [EKEvent] = []
         store.enumerateEvents(matching: predicate) { event, _ in
             if Self.isCandidate(event) { candidates.append(event) }
+        }
+        if let app {
+            let sameApp = candidates.filter { Self.joinApp(of: $0) == app }
+            if !sameApp.isEmpty { candidates = sameApp }
         }
         guard let best = Self.best(of: candidates, at: date) else {
             Self.log.notice("no matching calendar event — recording as ad-hoc")
@@ -94,12 +103,12 @@ public final class CalendarService: @unchecked Sendable {
     }
 
     /// All events in a window, matched or not — used to show what EventKit really returns.
-    public func rawEvents(from start: Date, to end: Date) -> [(title: String, start: Date, calendar: String, isTeams: Bool)] {
+    public func rawEvents(from start: Date, to end: Date) -> [(title: String, start: Date, calendar: String, app: MeetingApp?)] {
         guard Self.authorizationStatus == .fullAccess else { return [] }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-        var results: [(String, Date, String, Bool)] = []
+        var results: [(String, Date, String, MeetingApp?)] = []
         store.enumerateEvents(matching: predicate) { event, _ in
-            results.append((event.title ?? "—", event.startDate, event.calendar?.title ?? "—", Self.containsJoinURL(event)))
+            results.append((event.title ?? "—", event.startDate, event.calendar?.title ?? "—", Self.joinApp(of: event)))
         }
         return results
     }
@@ -109,12 +118,21 @@ public final class CalendarService: @unchecked Sendable {
     static func isCandidate(_ event: EKEvent) -> Bool {
         guard !event.isAllDay else { return false }
         guard participantStatus(event) != .declined else { return false }
-        return containsJoinURL(event)
+        return joinApp(of: event) != nil
     }
 
-    static func containsJoinURL(_ event: EKEvent) -> Bool {
-        let haystacks = [event.url?.absoluteString, event.location, event.notes]
-        return haystacks.contains { $0?.contains(joinURLMarker) == true }
+    /// The meeting app whose join link the event carries. URL first, then location, then notes:
+    /// an event's own URL field is the most deliberate of the three, and a Teams invite's notes
+    /// often mention a Zoom fallback (or the other way round).
+    static func joinApp(of event: EKEvent) -> MeetingApp? {
+        joinApp(url: event.url?.absoluteString, location: event.location, notes: event.notes)
+    }
+
+    static func joinApp(url: String?, location: String?, notes: String?) -> MeetingApp? {
+        for haystack in [url, location, notes] {
+            if let haystack, let app = MeetingApp.app(forJoinText: haystack) { return app }
+        }
+        return nil
     }
 
     static func participantStatus(_ event: EKEvent) -> EKParticipantStatus {

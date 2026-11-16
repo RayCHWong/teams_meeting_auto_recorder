@@ -24,8 +24,8 @@ func option(_ name: String) -> String? {
     return arguments[index + 1]
 }
 
-// Prefixes, not exact ids: the HAL only ever shows Teams' child processes.
-let teamsBundlePrefixes = ["com.microsoft.teams2", "com.microsoft.teams"]
+// Prefixes, not exact ids: the HAL only ever shows Teams' child processes. Zoom included.
+let meetingBundlePrefixes = MeetingApp.allBundlePrefixes
 
 func describe(_ object: AudioObjectID) -> String {
     let bundle = ProcessResolver.bundleID(of: object) ?? "—"
@@ -41,9 +41,9 @@ func resolveTargetProcesses() throws -> [AudioObjectID] {
     if let pidString = option("pid"), let pid = pid_t(pidString) {
         return [try ProcessResolver.processObject(forPID: pid)]
     }
-    let prefixes = option("bundle-id").map { [$0] } ?? teamsBundlePrefixes
+    let prefixes = option("bundle-id").map { [$0] } ?? meetingBundlePrefixes
     let objects = ProcessResolver.processObjects(matchingPrefixes: prefixes)
-    guard !objects.isEmpty else { throw RecorderError.teamsNotRunning }
+    guard !objects.isEmpty else { throw RecorderError.meetingAppNotRunning }
     return objects
 }
 
@@ -131,7 +131,7 @@ func runRecord() throws {
         scope = .processes(targets)
     }
 
-    let tap = try ProcessTap(scope: scope, mono: flag("global"), restoreBundleIDs: teamsBundlePrefixes)
+    let tap = try ProcessTap(scope: scope, mono: flag("global"), restoreBundleIDs: meetingBundlePrefixes)
     print("• tap format: \(tap.format)")
 
     let systemWriter = try AudioFileWriter(
@@ -197,7 +197,7 @@ func runRecord() throws {
 /// halfway through a real call.
 func runSession() throws {
     let seconds = Double(option("seconds") ?? "") ?? 10
-    let prefixes = option("bundle-id").map { [$0] } ?? teamsBundlePrefixes
+    let prefixes = option("bundle-id").map { [$0] } ?? meetingBundlePrefixes
     let root = URL(fileURLWithPath: option("out") ?? "./build/session-test", isDirectory: true)
     let store = RecordingStore(root: root)
 
@@ -296,12 +296,12 @@ func runCalendar() {
     let days = Double(option("days") ?? "") ?? 7
     let now = Date()
     let events = service.rawEvents(from: now.addingTimeInterval(-days * 86400), to: now.addingTimeInterval(days * 86400))
-    let teamsEvents = events.filter(\.isTeams)
-    print("\n\(events.count) event(s) in ±\(Int(days)) days, \(teamsEvents.count) with a Teams join link:")
+    let teamsEvents = events.filter { $0.app != nil }
+    print("\n\(events.count) event(s) in ±\(Int(days)) days, \(teamsEvents.count) with a Teams (T) or Zoom (Z) join link:")
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
     for event in events.sorted(by: { $0.start < $1.start }).prefix(25) {
-        print("  \(event.isTeams ? "T" : " ") \(formatter.string(from: event.start))  \(event.title)   [\(event.calendar)]")
+        print("  \(event.app?.name.prefix(1) ?? " ") \(formatter.string(from: event.start))  \(event.title)   [\(event.calendar)]")
     }
     // What `meeting(at:)` actually resolves to, minute by minute. The match depends on the
     // clock, so a single sample proves nothing: a recording is split when the answer *changes*
@@ -334,7 +334,7 @@ func runCalendar() {
     }
 
     if teamsEvents.isEmpty && !events.isEmpty {
-        print("\n  Events exist but none carry a teams.microsoft.com/l/meetup-join link — check that")
+        print("\n  Events exist but none carry a Teams or Zoom join link — check that")
         print("  the work account, not just a personal calendar, is connected.")
     }
 }
@@ -469,7 +469,7 @@ func runApp(_ subcommand: String) {
 // MARK: - watch
 
 func runWatch() throws {
-    let prefixes = option("bundle-id").map { [$0] } ?? teamsBundlePrefixes
+    let prefixes = option("bundle-id").map { [$0] } ?? meetingBundlePrefixes
     let seconds = Double(option("seconds") ?? "") ?? .infinity
     print("Watching \(prefixes.joined(separator: ", ")) for input activity. Ctrl-C to stop.  (Gate 2, plan.md §7)")
     let monitor = ProcessMonitor(bundlePrefixes: prefixes)
@@ -523,7 +523,7 @@ do {
           list                    enumerate Core Audio process objects and who is making sound
           plist                   verify the privacy usage strings survived the build
           record                  capture and run the non-zero sample check (Gate 1)
-          watch                   log Teams join/leave transitions (Gate 2)
+          watch                   log Teams/Zoom join/leave transitions (Gate 2)
                                     --bundle-id / --seconds / --start-debounce / --stop-debounce
           session                 run a full RecordingSession incl. meta.json (Gates 3-4)
           calendar                what EventKit can actually see (--days N)
@@ -539,13 +539,13 @@ do {
         session options:
           --seconds <n>           capture duration (default 10)
           --out <dir>             recordings root (default ./build/session-test)
-          --bundle-id <id>        target prefix (default Microsoft Teams)
+          --bundle-id <id>        target prefix (default Teams + Zoom)
           --simulate-sleep        force a segment rebuild halfway through
 
         record options:
           --seconds <n>           capture duration (default 10)
           --out <dir>             output directory (default ./build/spike)
-          --bundle-id <id>        target a different app (default Microsoft Teams)
+          --bundle-id <id>        target a different app (default Teams + Zoom)
           --pid <n>               target a specific pid
           --global                global tap excluding self (the §6.2 fallback)
           --no-mic                skip microphone capture

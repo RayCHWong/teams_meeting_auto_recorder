@@ -34,9 +34,9 @@
 	  bundle rather than trusting this file.
 	-->
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>Records the audio of your Teams meetings.</string>
+	<string>Records the audio of your Teams and Zoom meetings.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Records your side of your Teams meetings.</string>
+	<string>Records your side of your Teams and Zoom meetings.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Names recordings after the matching meeting on your calendar.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

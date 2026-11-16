@@ -1,13 +1,14 @@
 # Teams Meeting Auto-Recorder
 
-A macOS menu bar app that records the audio of your Microsoft Teams meetings automatically.
+A macOS menu bar app that records the audio of your Microsoft Teams and Zoom meetings
+automatically.
 It starts when you actually join a call, stops when you leave, and names each recording from
 the matching calendar event.
 
 Everything runs locally. No cloud, no accounts, no network egress.
 
 > **Recording other people has rules.** One-party consent is the legal floor in some
-> jurisdictions and not the answer anywhere. Your employer's policy, your Teams tenant's own
+> jurisdictions and not the answer anywhere. Your employer's policy, your Teams or Zoom tenant's own
 > recording policy, and any regulated data discussed in the meeting all sit above it — and
 > silently recording colleagues carries a social cost even where it is permitted. The menu bar
 > shows a visible recording indicator and a manual stop for this reason. Check with whoever owns
@@ -17,12 +18,12 @@ Everything runs locally. No cloud, no accounts, no network egress.
 
 ## What it does
 
-- **Detects calls, not calendar slots.** Recording is driven by Teams actually pulling from an
+- **Detects calls, not calendar slots.** Recording is driven by Teams or Zoom actually pulling from an
   audio input device, so it handles joining late, leaving early, meetings you skip, and ad-hoc
   calls that were never scheduled.
 - **Captures both sides.** Your microphone and the far end are captured separately and combined
   into one file afterwards. You can keep the separate tracks instead, or both.
-- **Names recordings from your calendar.** Matched against Teams meetings in the macOS Calendar
+- **Names recordings from your calendar.** Matched against Teams and Zoom meetings in the macOS Calendar
   app, with attendees recorded alongside. A calendar miss never prevents a recording.
 - **Transcribes on device** *(macOS 26)*. Optional, after the call, using Apple's Speech
   framework — either the long-form model or the model behind macOS Dictation, whichever suits
@@ -31,7 +32,7 @@ Everything runs locally. No cloud, no accounts, no network egress.
 - **Tells you when it is failing.** The most likely failure is a recording that contains perfect
   silence, so the app measures its own output continuously and says so — mid-recording, not
   afterwards.
-- **Survives the awkward cases.** System sleep, headset swaps, Teams restarts, back-to-back
+- **Survives the awkward cases.** System sleep, headset swaps, Teams or Zoom restarts, back-to-back
   meetings, low disk, runaway recordings, and app crashes mid-processing.
 
 ## Requirements
@@ -42,7 +43,7 @@ Everything runs locally. No cloud, no accounts, no network egress.
 - Xcode Command Line Tools (`xcode-select --install`) — **Xcode itself is not required**.
   Check with `swift --version`; built against Swift 6.2 and 6.3.
 - Intel and Apple Silicon both work.
-- Microsoft Teams (the current client, `com.microsoft.teams2`)
+- Microsoft Teams (the current client, `com.microsoft.teams2`) and/or Zoom (`us.zoom.xos`)
 
 ## Install
 
@@ -84,7 +85,7 @@ The menu bar icon shows the current state and the elapsed time while recording.
 
 | Action | What it does |
 |---|---|
-| *(automatic)* | Recording starts ~3 s after you join a Teams call and stops ~10 s after you leave |
+| *(automatic)* | Recording starts ~3 s after you join a Teams or Zoom call and stops ~10 s after you leave |
 | **Stop Recording** | Ends the current recording immediately |
 | **Start Recording** | For a call the detector missed |
 | **Record In-Person Meeting** | Asks for a name, then captures the microphone only |
@@ -129,8 +130,14 @@ drift apart over an hour, so summing them in the realtime path risks corrupting 
 They are mixed after the call instead, which also means a crash mid-meeting still leaves usable
 audio.
 
-**Join detection drives recording; the calendar only labels it.** Teams pulling from an input
-device means a call is live — more reliable than any calendar window.
+**Join detection drives recording; the calendar only labels it.** Teams or Zoom pulling from an
+input device means a call is live — more reliable than any calendar window.
+
+**One app per recording.** Both apps are watched at once, but only the one holding the microphone
+is tapped, so a Teams notification chime does not end up in a Zoom recording. The app is written
+to `meta.json` as `app`, and the calendar prefers events carrying that app's join link
+(`teams.microsoft.com/l/meetup-join`, `*.zoom.us/j/`, `/my/`, `/w/`, `zoomgov.com/j/`).
+App-specific details live in one place, `Sources/RecorderKit/MeetingApp.swift`.
 
 **A stable signing identity is mandatory.** See above.
 
@@ -177,7 +184,7 @@ build/TapSpike.app/Contents/MacOS/TapSpike <command>
 - **The transcription language is manual.** There is no language-identification API in the Speech
   framework, so a meeting in a language other than the one selected will produce nonsense.
   Change it in Settings.
-- **Below macOS 26 the tap does not survive a Teams restart.** `CATapDescription.bundleIDs` and
+- **Below macOS 26 the tap does not survive a Teams or Zoom restart.** `CATapDescription.bundleIDs` and
   `processRestoreEnabled`, which re-attach a tap when the tapped app restarts, are also macOS 26.
   If Teams restarts mid-meeting the far-end track goes silent for the remainder — the silence
   alert fires and `meta.json` records it, so it is visible, but it does not repair itself.
@@ -185,8 +192,9 @@ build/TapSpike.app/Contents/MacOS/TapSpike <command>
   `requestAuthorization` returns `notificationsNotAllowed`, plain and provisional. Alerts go to
   the menu bar icon, a floating panel, the library, and `alerts.log` instead. Signing with a
   Developer ID should restore notifications with no code change.
-- **Teams only.** Adding Zoom or Meet means extending one list of bundle-id prefixes, but it has
-  not been done or tested.
+- **Teams and Zoom only.** Google Meet runs inside a browser, so it cannot be told apart from the
+  rest of the browser by bundle id. Zoom has been tested on a live call, with Teams running
+  alongside.
 - **Not notarized, not sandboxed, no App Store.** You build it yourself.
 
 ## Project layout

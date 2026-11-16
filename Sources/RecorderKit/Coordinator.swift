@@ -24,10 +24,10 @@ public final class Coordinator {
 
     private nonisolated static let log = Logger(subsystem: loggingSubsystem, category: "Coordinator")
 
-    /// The HAL never shows `com.microsoft.teams2` itself — only its children.
-    public nonisolated static let defaultTeamsBundlePrefixes = ["com.microsoft.teams2", "com.microsoft.teams"]
+    /// Every supported meeting app — see `MeetingApp`.
+    public nonisolated static let defaultBundlePrefixes = MeetingApp.allBundlePrefixes
 
-    /// What is actually being watched and tapped — Teams unless overridden for testing.
+    /// What is actually being watched and tapped — Teams and Zoom unless overridden for testing.
     public var targetBundlePrefixes: [String] { settings.targetBundlePrefixes }
 
     public private(set) var state: State = .idle
@@ -40,7 +40,10 @@ public final class Coordinator {
     public private(set) var systemLevel: Float = 0
     public private(set) var micLevel: Float = 0
     public private(set) var lastError: String?
-    public private(set) var teamsIsRunning = false
+    public private(set) var meetingAppIsRunning = false
+    /// The app whose call is armed or being recorded, for the status line. Nil when idle, for an
+    /// in-person recording, or when nothing was using the microphone at start.
+    public private(set) var activeApp: MeetingApp?
     /// Recordings whose capture has finished but whose mixing or transcription is still running.
     /// Observable so the library reflects it without polling.
     public private(set) var processing: Set<URL> = []
@@ -63,10 +66,10 @@ public final class Coordinator {
     /// True between the start request and the tap actually running — capture start is async
     /// now, so a second request must not slip in behind it.
     private var isStartingCapture = false
-    /// Last moment Teams was seen using an input device during the current recording, and
+    /// Last moment a meeting app was seen using an input device during the current recording, and
     /// whether it ever was. Drives the stop watchdog below.
-    private var lastTeamsInputAt: Date?
-    private var sawTeamsInputWhileRecording = false
+    private var lastAppInputAt: Date?
+    private var sawAppInputWhileRecording = false
     /// Notes are appended to `meta.json`, so a per-tick condition has to be latched or it writes
     /// the same line once a second for the length of the meeting.
     private var didNoteTargetsGone = false
@@ -153,12 +156,13 @@ public final class Coordinator {
     private func handle(_ event: ProcessMonitor.Event) {
         switch event {
         case .targetAppeared:
-            teamsIsRunning = true
+            meetingAppIsRunning = true
         case .targetDisappeared:
-            teamsIsRunning = false
+            meetingAppIsRunning = false
         case .armed:
             guard settings.isAutoRecordActive, session == nil else { return }
             state = .armed
+            activeApp = monitor.appUsingInput()
             // Bring the mic up now rather than at .callStarted: it has to be running before
             // the aggregate device is created (plan.md §6.3), and the start debounce is
             // exactly the spare few seconds in which to do it. Off the main actor — opening a
@@ -172,6 +176,7 @@ public final class Coordinator {
             // window while a capture is starting up.
             if state == .armed, session == nil {
                 state = .idle
+                activeApp = nil
                 releaseMicIfIdle()
             }
         case .callStarted:
@@ -202,15 +207,15 @@ public final class Coordinator {
         }
         let now = Date()
         let events = calendar.rawEvents(from: now.addingTimeInterval(-7 * 86400), to: now.addingTimeInterval(7 * 86400))
-        let teamsCount = events.filter(\.isTeams).count
-        Self.log.notice("events in ±7 days: \(events.count), with a Teams join link: \(teamsCount)")
+        let linkedCount = events.filter { $0.app != nil }.count
+        Self.log.notice("events in ±7 days: \(events.count), with a Teams or Zoom join link: \(linkedCount)")
 
-        // What would actually be written into meta.json for the next few Teams meetings.
+        // What would actually be written into meta.json for the next few online meetings.
         for meeting in calendar.meetings(from: now, to: now.addingTimeInterval(7 * 86400)).prefix(3) {
             Self.log.notice("  would record as \"\(meeting.title, privacy: .public)\" — organizer: \(meeting.organizer ?? "—", privacy: .public); attendees: \(meeting.attendees.joined(separator: "; "), privacy: .public)")
         }
         for event in events.sorted(by: { $0.start < $1.start }).prefix(15) {
-            Self.log.notice("  \(event.isTeams ? "T" : "-", privacy: .public) \(event.start, privacy: .public) \(event.title, privacy: .public) [\(event.calendar, privacy: .public)]")
+            Self.log.notice("  \(event.app?.name.prefix(1) ?? "-", privacy: .public) \(event.start, privacy: .public) \(event.title, privacy: .public) [\(event.calendar, privacy: .public)]")
         }
     }
 
@@ -229,11 +234,13 @@ public final class Coordinator {
         // The calendar names automatic recordings only. Pressing record by hand is an explicit
         // "this one, now" — it may well be nothing to do with whatever the calendar says is
         // happening, so borrowing that meeting's name would mislabel it.
+        let app = capturesSystemAudio ? monitor.appUsingInput() : nil
         let meeting: MeetingInfo
         if let title, !title.isEmpty {
             meeting = .named(title)
         } else {
-            meeting = trigger == .auto ? calendar.meeting() : .adHoc
+            // The app in the call picks between overlapping Teams and Zoom events.
+            meeting = trigger == .auto ? calendar.meeting(for: app) : .adHoc
         }
         let session: RecordingSession
         do {
@@ -253,6 +260,7 @@ public final class Coordinator {
         }
 
         self.session = session
+        self.activeApp = app
         self.currentDirectory = session.directory
         self.currentEventID = meeting.eventIdentifier
         isStartingCapture = true
@@ -261,8 +269,8 @@ public final class Coordinator {
         currentTitle = meeting.title
         lastError = nil
         didWarnSilentThisSession = []
-        lastTeamsInputAt = Date()
-        sawTeamsInputWhileRecording = capturesSystemAudio && monitor.inputIsActive()
+        lastAppInputAt = Date()
+        sawAppInputWhileRecording = capturesSystemAudio && monitor.inputIsActive()
         didNoteTargetsGone = false
 
         // If the tap has not started shortly, the TCC prompt is sitting unanswered somewhere
@@ -318,6 +326,7 @@ public final class Coordinator {
         guard session === self.session else { return }
         isStartingCapture = false
         self.session = nil
+        activeApp = nil
         currentDirectory = nil
         currentEventID = nil
         notedCalendarMoves = []
@@ -350,6 +359,7 @@ public final class Coordinator {
     private func captureDidStop(_ session: RecordingSession, metadata: RecordingMetadata, reason: String) {
         if self.session == nil {
             state = .idle
+            activeApp = nil
             startedAt = nil
             currentTitle = nil
             releaseMicIfIdle()
@@ -451,21 +461,23 @@ public final class Coordinator {
         systemLevel = levels.system
         micLevel = levels.microphone
 
-        // None of the Teams-derived signals apply to an in-person recording: there is no tap, and
-        // whatever Teams happens to be doing is irrelevant to a meeting in the room.
+        // None of the meeting-app signals apply to an in-person recording: there is no tap, and
+        // whatever Teams or Zoom happens to be doing is irrelevant to a meeting in the room.
         guard session.capturesSystemAudio else { return }
 
-        // Stop when Teams releases the microphone, independent of the monitor's own state
+        // Stop when the meeting app releases the microphone, independent of the monitor's own state
         // machine. `.callEnded` only fires if the machine had entered `isInCall`, which it never
         // does for a recording started by hand, or one already running when the app launched —
         // so relying on it alone leaves recordings that never end.
         if monitor.inputIsActive() {
-            lastTeamsInputAt = Date()
-            sawTeamsInputWhileRecording = true
-        } else if sawTeamsInputWhileRecording,
-                  let last = lastTeamsInputAt,
+            lastAppInputAt = Date()
+            sawAppInputWhileRecording = true
+            // A recording started by hand before joining learns its app here.
+            if activeApp == nil { activeApp = monitor.appUsingInput() }
+        } else if sawAppInputWhileRecording,
+                  let last = lastAppInputAt,
                   Date().timeIntervalSince(last) >= settings.stopDebounce {
-            stopRecording(reason: "Teams stopped using the microphone")
+            stopRecording(reason: "\(activeApp?.name ?? "meeting app") stopped using the microphone")
             return
         }
 
@@ -477,11 +489,11 @@ public final class Coordinator {
             return
         }
 
-        // The calendar never stops a recording. A recording ends when Teams releases the audio
+        // The calendar never stops a recording. A recording ends when the app releases the audio
         // device — i.e. when you actually leave the call — and nothing else.
         //
         // This reverses plan.md §9.4's "never merge two events into one file". That rule assumed
-        // Teams audio runs continuously across back-to-back meetings, so only the calendar could
+        // meeting audio runs continuously across back-to-back meetings, so only the calendar could
         // tell them apart. In practice moving between calls *does* release the audio device, so the
         // stop debounce above already splits genuine transitions. What the calendar rule actually
         // caught was meetings that **overran**: a 10:00-11:00 call still going at 11:00 was cut in
@@ -492,21 +504,22 @@ public final class Coordinator {
         // long recording explicable a year later. Latched per event, so a 90-minute overrun does
         // not accumulate 90 identical notes.
         if state == .recording, let currentEventID, session.metadata.trigger == .auto {
-            if let movedTo = calendar.meeting().eventIdentifier,
+            let next = calendar.meeting(for: activeApp)
+            if let movedTo = next.eventIdentifier,
                movedTo != currentEventID,
                !notedCalendarMoves.contains(movedTo) {
                 notedCalendarMoves.insert(movedTo)
-                let title = calendar.meeting().title
+                let title = next.title
                 session.addNote("Calendar moved on to \u{201C}\(title)\u{201D} while this call was "
                                 + "still running; kept recording as one meeting.")
             }
         }
 
-        // A Teams restart invalidates the process object and the tap goes quiet with no error.
+        // An app restart invalidates the process object and the tap goes quiet with no error.
         // Latched: this is a per-tick condition and the note is permanent.
         if state == .recording, !session.targetsAreAlive(), !didNoteTargetsGone {
             didNoteTargetsGone = true
-            session.addNote("Teams process disappeared mid-recording.")
+            session.addNote("\(activeApp?.name ?? "Meeting app") process disappeared mid-recording.")
         }
     }
 

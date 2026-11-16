@@ -5,7 +5,7 @@ import Foundation
 /// whether one is currently driving audio input.
 ///
 /// Input specifically, never output: output alone fires on notification sounds, whereas
-/// Teams pulling from the microphone means a call is genuinely live (plan.md §3, §7).
+/// Teams or Zoom pulling from the microphone means a call is genuinely live (plan.md §3, §7).
 public enum ProcessResolver {
     /// Every process object the HAL currently knows about.
     public static func allProcessObjects() throws -> [AudioObjectID] {
@@ -47,8 +47,25 @@ public enum ProcessResolver {
         guard let objects = try? allProcessObjects() else { return [] }
         return objects.filter { object in
             guard let identifier = bundleID(of: object) else { return false }
-            return prefixes.contains { identifier == $0 || identifier.hasPrefix($0 + ".") }
+            return MeetingApp.bundleID(identifier, matchesAnyOf: prefixes)
         }
+    }
+
+    /// The watched processes that belong to the call in progress — see
+    /// `MeetingApp.callFamily(of:within:)` — and the prefixes of that family.
+    public static func callTargets(matchingPrefixes prefixes: [String]) -> (objects: [AudioObjectID], prefixes: [String]) {
+        let objects = processObjects(matchingPrefixes: prefixes)
+        let described = objects.map { (bundleID: bundleID(of: $0) ?? "", isRunningInput: isRunningInput($0)) }
+        let family = MeetingApp.callFamily(of: described, within: prefixes)
+        return (family.indices.map { objects[$0] }, family.prefixes)
+    }
+
+    /// The supported app currently using an input device, if any.
+    public static func appUsingInput(_ objects: [AudioObjectID]) -> MeetingApp? {
+        objects.lazy
+            .filter { isRunningInput($0) }
+            .compactMap { bundleID(of: $0).flatMap(MeetingApp.app(forBundleID:)) }
+            .first
     }
 
     /// True if *any* of these process objects is pulling from an input device.

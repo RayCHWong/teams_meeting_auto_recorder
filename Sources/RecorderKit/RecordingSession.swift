@@ -6,7 +6,7 @@ import OSLog
 /// One recording in progress: a directory, a microphone stream, a system stream, and the
 /// `meta.json` that describes them.
 ///
-/// Capture is split into *segments*. Sleep, a Teams restart, or the 4-hour hard stop tear the
+/// Capture is split into *segments*. Sleep, a Teams or Zoom restart, or the 4-hour hard stop tear the
 /// tap down and open a new numbered file rather than trying to splice audio back together —
 /// gapless recovery across sleep is an explicit non-goal (plan.md §4, §9.4).
 public final class RecordingSession: @unchecked Sendable {
@@ -18,6 +18,9 @@ public final class RecordingSession: @unchecked Sendable {
 
     private let store: RecordingStore
     private let bundlePrefixes: [String]
+    /// The family actually tapped in the current segment — narrower than `bundlePrefixes` when
+    /// more than one meeting app is running. See `MeetingApp.callFamily(of:within:)`.
+    private var tappedPrefixes: [String]
     /// False for an in-person meeting: only the microphone is captured, there is no far end to
     /// tap, and nothing should warn about a silent system stream.
     public let capturesSystemAudio: Bool
@@ -56,6 +59,7 @@ public final class RecordingSession: @unchecked Sendable {
 
         self.store = store
         self.bundlePrefixes = bundlePrefixes
+        self.tappedPrefixes = bundlePrefixes
         self.capturesSystemAudio = capturesSystemAudio
         self.startedAt = startedAt
         self.directory = try store.makeDirectory(for: meeting, at: startedAt)
@@ -108,12 +112,21 @@ public final class RecordingSession: @unchecked Sendable {
             return
         }
 
-        let targets = ProcessResolver.processObjects(matchingPrefixes: bundlePrefixes)
-        guard !targets.isEmpty else { throw RecorderError.teamsNotRunning }
+        let (targets, familyPrefixes) = ProcessResolver.callTargets(matchingPrefixes: bundlePrefixes)
+        guard !targets.isEmpty else { throw RecorderError.meetingAppNotRunning }
+        tappedPrefixes = familyPrefixes
+        if let app = ProcessResolver.appUsingInput(targets) ?? Self.soleApp(of: familyPrefixes) {
+            if metadata.app == nil {
+                metadata.app = app.name
+            } else if metadata.app != app.name {
+                metadata.notes.append("Segment \(segment) captured \(app.name), not \(metadata.app ?? "—").")
+            }
+        }
+        Self.log.notice("segment \(self.segment) tapping \(targets.count) process(es): \(familyPrefixes.joined(separator: ", "), privacy: .public)")
 
         let tap: ProcessTap
         do {
-            tap = try ProcessTap(scope: .processes(targets), restoreBundleIDs: bundlePrefixes)
+            tap = try ProcessTap(scope: .processes(targets), restoreBundleIDs: familyPrefixes)
         } catch {
             // §6.2 fallback: if the process-scoped tap will not build, tap everything except
             // ourselves. Noisier, but a recording with the wrong neighbours on it beats none.
@@ -215,10 +228,17 @@ public final class RecordingSession: @unchecked Sendable {
         Self.log.notice("\(note, privacy: .public)")
     }
 
-    /// Whether the tap is still attached to a live Teams process. A Teams restart invalidates
-    /// the process object and the tap silently stops delivering.
+    /// Whether the tap is still attached to a live process of the app being recorded. A restart
+    /// invalidates the process object and the tap silently stops delivering. Checked against the
+    /// tapped family only: Teams still running says nothing about a Zoom call's tap.
     public func targetsAreAlive() -> Bool {
-        !ProcessResolver.processObjects(matchingPrefixes: bundlePrefixes).isEmpty
+        !ProcessResolver.processObjects(matchingPrefixes: tappedPrefixes).isEmpty
+    }
+
+    /// The supported app these prefixes belong to, when they all belong to exactly one.
+    private static func soleApp(of prefixes: [String]) -> MeetingApp? {
+        let apps = Set(prefixes.compactMap(MeetingApp.app(forBundleID:)))
+        return apps.count == 1 ? apps.first : nil
     }
 
     // MARK: - Finishing
